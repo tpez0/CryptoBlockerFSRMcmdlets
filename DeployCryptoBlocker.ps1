@@ -317,7 +317,7 @@ Write-Host "Adding/replacing File Screens.."
 $drivesContainingShares | ForEach-Object {
     Write-Host "File Screen for [$_] with Source Template [$fileTemplateName].."
     Remove-FsrmFileScreen -Path $_
-    $newFileScreen = "New-FsrmFileScreen -Path $_ -Template $fileTemplateName"
+    $newFileScreen = "New-FsrmFileScreen -Path '$_' -Template $fileTemplateName"
     Invoke-Expression $newFileScreen
 }
 
