@@ -11,7 +11,7 @@ $fileTemplateName = "CryptoBlockerTemplate"
 # Active screening: Do not allow users to save unathorized files
 $fileTemplateType = "Active"
 # Passive screening: Allow users to save unathorized files (use for monitoring)
-#$fileTemplateType = "Passiv"
+#$fileTemplateType = "Passive"
 
 # Write the email options to the temporary file - comment out the entire block if no email notification should be set
 $EmailNotification = $env:TEMP + "\tmpEmail001.tmp"
@@ -272,36 +272,53 @@ $fileGroups = @(New-CBArraySplit $monitoredExtensions)
 Write-Host "`n####"
 Write-Host "Adding/replacing File Groups.."
 ForEach ($group in $fileGroups) {
-    #Write-Host "Adding/replacing File Group [$($group.fileGroupName)] with monitored file [$($group.array -Join ",")].."
     Write-Host "`nFile Group [$($group.fileGroupName)] with monitored files from [$($group.array[0])] to [$($group.array[$group.array.GetUpperBound(0)])].."
-	&filescrn.exe filegroup Delete "/Filegroup:$($group.fileGroupName)" /Quiet
-    &filescrn.exe Filegroup Add "/Filegroup:$($group.fileGroupName)" "/Members:$($group.array -Join '|')"
+    Remove-FsrmFileGroup -Name "$($group.fileGroupName)" -Confirm:$False
+    New-FsrmFileGroup -Name "$($group.fileGroupName)" -IncludePattern @($group.array)
 }
 
 # Create File Screen Template with Notification
 Write-Host "`n####"
 Write-Host "Adding/replacing [$fileTemplateType] File Screen Template [$fileTemplateName] with eMail Notification [$EmailNotification] and Event Notification [$EventNotification].."
-&filescrn.exe Template Delete /Template:$fileTemplateName /Quiet
+
+####
+$mycmd = "Remove-FsrmFileScreenTemplate -Name $fileTemplateName"
+Invoke-Expression $mycmd
+###
+
 # Build the argument list with all required fileGroups and notifications
-$screenArgs = 'Template', 'Add', "/Template:$fileTemplateName", "/Type:$fileTemplateType"
+$ArgsArray:Empty
 ForEach ($group in $fileGroups) {
-    $screenArgs += "/Add-Filegroup:$($group.fileGroupName)"
+    $screenArgs = '"'
+    $screenArgs += "$($group.fileGroupName)"
+    $screenArgs += '"'
+    $ArgsArray += $screenArgs
+    $ArgsArray += ', '
 }
+$ArgsArray = $ArgsArray -replace “.$”
+$ArgsArray = $ArgsArray -replace “.$”
+$ArgsDef = "@("
+$ArgsDef+= $ArgsArray
+$ArgsDef+= ")"
+
 If ($EmailNotification -ne "") {
-    $screenArgs += "/Add-Notification:m,$EmailNotification"
+    #$screenArgs += "/Add-Notification:m,$EmailNotification"
 }
 If ($EventNotification -ne "") {
-    $screenArgs += "/Add-Notification:e,$EventNotification"
+    #$screenArgs += "/Add-Notification:e,$EventNotification"
 }
-&filescrn.exe $screenArgs
+
+$mycmd = "New-FsrmFileScreenTemplate -Name $fileTemplateName -IncludeGroup $ArgsDef"
+Invoke-Expression $mycmd
 
 # Create File Screens for every drive containing shares
 Write-Host "`n####"
 Write-Host "Adding/replacing File Screens.."
 $drivesContainingShares | ForEach-Object {
     Write-Host "File Screen for [$_] with Source Template [$fileTemplateName].."
-    &filescrn.exe Screen Delete "/Path:$_" /Quiet
-    &filescrn.exe Screen Add "/Path:$_" "/SourceTemplate:$fileTemplateName"
+    Remove-FsrmFileScreen -Path $_
+    $mycmd = "New-FsrmFileScreen -Path $_ -Template $fileTemplateName"
+    Invoke-Expression $mycmd
 }
 
 # Add Folder Exceptions from ExcludeList.txt
@@ -315,12 +332,20 @@ if (Test-Path .\ExcludePaths.txt)
 If (Test-Path $PSScriptRoot\ExcludePaths.txt) {
     Get-Content $PSScriptRoot\ExcludePaths.txt | ForEach-Object {
         If (Test-Path $_) {
-            # Build the argument list with all required fileGroups
-            $ExclusionArgs = 'Exception', 'Add', "/Path:$_"
-            ForEach ($group in $fileGroups) {
-                $ExclusionArgs += "/Add-Filegroup:$($group.fileGroupName)"
+            Write-Host "Updating Path:"
+            $_
+            $getException = "Get-FsrmFileScreenException -Path '$_' -erroraction 'silentlycontinue'"
+            $checkException = Invoke-Expression $getException
+            if (($null -ne $checkException.Path) -and (Test-Path $checkException.Path)) {
+                $removeScreen = "Remove-FsrmFileScreenException -Path '$_'"
+                Invoke-Expression $removeScreen
+                $newScreen = "New-FsrmFileScreenException -Path '$_' -IncludeGroup $ArgsDef"
+                Invoke-Expression $newScreen
+            } else {
+                $newScreen = "New-FsrmFileScreenException -Path '$_' -IncludeGroup $ArgsDef"
+                Invoke-Expression $newScreen
             }
-            &filescrn.exe $ExclusionArgs
+            
         }
     }
 }
