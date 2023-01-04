@@ -193,10 +193,10 @@ if (Test-Path $PSScriptRoot\ProtectList.txt)
 }
 Else {
     $drivesContainingShares =   @(Get-WmiObject Win32_Share | 
-                    Select Name,Path,Type | 
+                    Select-Object Name,Path,Type | 
                     Where-Object { $_.Type -match '0|2147483648' } | 
-                    Select -ExpandProperty Path | 
-                    Select -Unique)
+                    Select-Object -ExpandProperty Path | 
+                    Select-Object -Unique)
 }
 
 
@@ -282,8 +282,8 @@ Write-Host "`n####"
 Write-Host "Adding/replacing [$fileTemplateType] File Screen Template [$fileTemplateName] with eMail Notification [$EmailNotification] and Event Notification [$EventNotification].."
 
 ####
-$mycmd = "Remove-FsrmFileScreenTemplate -Name $fileTemplateName"
-Invoke-Expression $mycmd
+$removeTemplate = "Remove-FsrmFileScreenTemplate -Name $fileTemplateName"
+Invoke-Expression $removeTemplate
 ###
 
 # Build the argument list with all required fileGroups and notifications
@@ -308,8 +308,8 @@ If ($EventNotification -ne "") {
     #$screenArgs += "/Add-Notification:e,$EventNotification"
 }
 
-$mycmd = "New-FsrmFileScreenTemplate -Name $fileTemplateName -IncludeGroup $ArgsDef"
-Invoke-Expression $mycmd
+$newTemplate = "New-FsrmFileScreenTemplate -Name $fileTemplateName -IncludeGroup $ArgsDef"
+Invoke-Expression $newTemplate
 
 # Create File Screens for every drive containing shares
 Write-Host "`n####"
@@ -317,8 +317,8 @@ Write-Host "Adding/replacing File Screens.."
 $drivesContainingShares | ForEach-Object {
     Write-Host "File Screen for [$_] with Source Template [$fileTemplateName].."
     Remove-FsrmFileScreen -Path $_
-    $mycmd = "New-FsrmFileScreen -Path $_ -Template $fileTemplateName"
-    Invoke-Expression $mycmd
+    $newFileScreen = "New-FsrmFileScreen -Path $_ -Template $fileTemplateName"
+    Invoke-Expression $newFileScreen
 }
 
 # Add Folder Exceptions from ExcludeList.txt
